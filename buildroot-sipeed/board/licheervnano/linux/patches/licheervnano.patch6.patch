@@ -1,0 +1,71 @@
+
+diff --git a/arch/riscv/boot/dts/sophgo/Makefile b/arch/riscv/boot/dts/sophgo/Makefile
+index 57ad82a61ea6..47d4243a8f35 100644
+--- a/arch/riscv/boot/dts/sophgo/Makefile
++++ b/arch/riscv/boot/dts/sophgo/Makefile
+@@ -1,4 +1,5 @@
+ # SPDX-License-Identifier: GPL-2.0
+ dtb-$(CONFIG_ARCH_SOPHGO) += cv1800b-milkv-duo.dtb
+ dtb-$(CONFIG_ARCH_SOPHGO) += cv1812h-huashan-pi.dtb
++dtb-$(CONFIG_ARCH_SOPHGO) += sg2002-licheerv-nano-b.dtb
+ dtb-$(CONFIG_ARCH_SOPHGO) += sg2042-milkv-pioneer.dtb
+diff --git a/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts b/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts
+new file mode 100644
+index 000000000000..d011fb15b097
+--- /dev/null
++++ b/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts
+@@ -0,0 +1,53 @@
++// SPDX-License-Identifier: (GPL-2.0 OR MIT)
++/*
++ * Copyright (C) 2024 Thomas Bonnefille <thomas.bonnefille@bootlin.com>
++ */
++
++/dts-v1/;
++
++#include "sg2002.dtsi"
++
++/ {
++	model = "LicheeRV Nano B";
++	compatible = "sipeed,licheerv-nano-b", "sipeed,licheerv-nano", "sophgo,sg2002";
++
++	aliases {
++		gpio0 = &gpio0;
++		gpio1 = &gpio1;
++		gpio2 = &gpio2;
++		gpio3 = &gpio3;
++		serial0 = &uart0;
++		serial1 = &uart1;
++		serial2 = &uart2;
++		serial3 = &uart3;
++		serial4 = &uart4;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++};
++
++&osc {
++	clock-frequency = <25000000>;
++};
++
++&sdhci0 {
++	status = "okay";
++	bus-width = <4>;
++	no-1-8-v;
++	no-mmc;
++	no-sdio;
++};
++
++&uart0 {
++	status = "okay";
++};
++
++&uart1 {
++	status = "okay";
++};
++
++&i2c0 {
++	status = "okay";
++};
+

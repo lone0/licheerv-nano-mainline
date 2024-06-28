@@ -1,0 +1,12 @@
+diff --git a/Documentation/devicetree/bindings/timer/sifive,clint.yaml b/Documentation/devicetree/bindings/timer/sifive,clint.yaml
+index fced6f2d8ecb..b42d43d2de48 100644
+--- a/Documentation/devicetree/bindings/timer/sifive,clint.yaml
++++ b/Documentation/devicetree/bindings/timer/sifive,clint.yaml
+@@ -40,6 +40,7 @@ properties:
+               - allwinner,sun20i-d1-clint
+               - sophgo,cv1800b-clint
+               - sophgo,cv1812h-clint
++              - sophgo,sg2002-clint
+               - thead,th1520-clint
+           - const: thead,c900-clint
+       - items:

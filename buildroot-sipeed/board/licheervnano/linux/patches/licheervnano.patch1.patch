@@ -1,0 +1,24 @@
+diff --git a/arch/riscv/boot/dts/sophgo/cv1800b.dtsi b/arch/riscv/boot/dts/sophgo/cv1800b.dtsi
+index ec9530972ae2..b9cd51457b4c 100644
+--- a/arch/riscv/boot/dts/sophgo/cv1800b.dtsi
++++ b/arch/riscv/boot/dts/sophgo/cv1800b.dtsi
+@@ -25,3 +25,7 @@ &clint {
+ &clk {
+ 	compatible = "sophgo,cv1800-clk";
+ };
++
++&sdhci0 {
++	compatible = "sophgo,cv1800b-dwcmshc";
++};
+diff --git a/arch/riscv/boot/dts/sophgo/cv18xx.dtsi b/arch/riscv/boot/dts/sophgo/cv18xx.dtsi
+index 891932ae470f..7247c7c3013c 100644
+--- a/arch/riscv/boot/dts/sophgo/cv18xx.dtsi
++++ b/arch/riscv/boot/dts/sophgo/cv18xx.dtsi
+@@ -288,7 +288,6 @@ uart4: serial@41c0000 {
+ 		};
+ 
+ 		sdhci0: mmc@4310000 {
+-			compatible = "sophgo,cv1800b-dwcmshc";
+ 			reg = <0x4310000 0x1000>;
+ 			interrupts = <36 IRQ_TYPE_LEVEL_HIGH>;
+ 			clocks = <&clk CLK_AXI4_SD0>,

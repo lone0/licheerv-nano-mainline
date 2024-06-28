@@ -1,0 +1,16 @@
+diff --git a/Documentation/devicetree/bindings/riscv/sophgo.yaml b/Documentation/devicetree/bindings/riscv/sophgo.yaml
+index 9bc813dad098..a14cb10ff3f0 100644
+--- a/Documentation/devicetree/bindings/riscv/sophgo.yaml
++++ b/Documentation/devicetree/bindings/riscv/sophgo.yaml
+@@ -26,6 +26,11 @@ properties:
+           - enum:
+               - sophgo,huashan-pi
+           - const: sophgo,cv1812h
++      - items:
++          - enum:
++              - sipeed,licheerv-nano-b
++          - const: sipeed,licheerv-nano
++          - const: sophgo,sg2002
+       - items:
+           - enum:
+               - milkv,pioneer
