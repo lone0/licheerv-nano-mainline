@@ -22,7 +22,7 @@
     /*FDT*/
     fdt-licheervnano {
         description = "cvitek device tree - licheervnano";
-        data = /incbin/("./licheervnano.dtb");
+        data = /incbin/("./sg2002-licheerv-nano-b.dtb");
         type = "flat_dt";
         arch = "riscv";
         compression = "none";
