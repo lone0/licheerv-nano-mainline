@@ -1,0 +1,10 @@
+--- a/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts	2024-06-29 01:01:15.847968568 +0000
++++ b/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts	2024-06-29 00:09:02.674146503 +0000
+@@ -38,6 +38,7 @@
+ 	no-1-8-v;
+ 	no-mmc;
+ 	no-sdio;
++	disable-wp;
+ };
+ 
+ &uart0 {
