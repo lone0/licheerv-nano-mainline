@@ -1,0 +1,13 @@
+--- a/arch/riscv/configs/defconfig	2024-06-29 01:22:38.620458952 +0000
++++ b/arch/riscv/configs/defconfig	2024-06-29 01:24:16.958589360 +0000
+@@ -36,6 +36,10 @@
+ CONFIG_ARCH_CANAAN=y
+ CONFIG_SMP=y
+ CONFIG_HOTPLUG_CPU=y
++CONFIG_CMDLINE="rootwait"
++# CONFIG_CMDLINE_FALLBACK is not set
++CONFIG_CMDLINE_EXTEND=y
++#
+ CONFIG_PM=y
+ CONFIG_CPU_IDLE=y
+ CONFIG_CPU_FREQ=y
