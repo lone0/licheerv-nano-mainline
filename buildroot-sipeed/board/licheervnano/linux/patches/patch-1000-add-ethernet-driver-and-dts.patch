@@ -1,0 +1,303 @@
+diff -urpN linux-v6.11-origin/arch/riscv/boot/dts/sophgo/cv18xx.dtsi linux-v6.11/arch/riscv/boot/dts/sophgo/cv18xx.dtsi
+--- linux-v6.11-origin/arch/riscv/boot/dts/sophgo/cv18xx.dtsi	2024-10-07 16:32:45.194973043 +0800
++++ linux-v6.11/arch/riscv/boot/dts/sophgo/cv18xx.dtsi	2024-10-07 15:57:27.229356525 +0800
+@@ -287,6 +287,46 @@
+ 			status = "disabled";
+ 		};
+ 
++		ethernet0: ethernet@4070000 {
++			compatible = "cvitek,ethernet";
++			#address-cells = <1>;
++			#size-cells = <1>;
++			reg = <0x04070000 0x10000>;
++			clock-names = "stmmaceth", "clk_500m_eth";
++			clocks = <&clk CLK_AXI4_ETH0>, <&clk CLK_ETH0_500M>;
++			//phy-reset-gpios = <&porta 26 0>;
++
++			tx-fifo-depth = <8192>;
++			rx-fifo-depth = <8192>;
++			/* no hash filter and perfect filter support */
++			snps,multicast-filter-bins = <0>;
++			snps,perfect-filter-entries = <1>;
++
++			snps,txpbl = <8>;
++			snps,rxpbl = <8>;
++			snps,aal;
++
++			snps,axi-config = <&stmmac_axi_setup>;
++			snps,mtl-rx-config = <&mtl_rx_setup>;
++			snps,mtl-tx-config = <&mtl_tx_setup>;
++
++			mtl_rx_setup: rx-queues-config {
++				snps,rx-queues-to-use = <1>;
++				queue0 {};
++			};
++
++			mtl_tx_setup: tx-queues-config {
++				snps,tx-queues-to-use = <1>;
++				queue0 {};
++			};
++
++			stmmac_axi_setup: stmmac-axi-config {
++				snps,wr_osr_lmt = <1>;
++				snps,rd_osr_lmt = <2>;
++				snps,blen = <4 8 16 0 0 0 0>;
++			};
++		};
++
+ 		sdhci0: mmc@4310000 {
+ 			reg = <0x4310000 0x1000>;
+ 			interrupts = <36 IRQ_TYPE_LEVEL_HIGH>;
+diff -urpN linux-v6.11-origin/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts linux-v6.11/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts
+--- linux-v6.11-origin/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts	2024-10-07 16:32:45.244973026 +0800
++++ linux-v6.11/arch/riscv/boot/dts/sophgo/sg2002-licheerv-nano-b.dts	2024-10-07 16:56:33.617700054 +0800
+@@ -21,6 +21,7 @@
+ 		serial2 = &uart2;
+ 		serial3 = &uart3;
+ 		serial4 = &uart4;
++		ethernet0 = &ethernet0;
+ 	};
+ 
+ 	chosen {
+@@ -32,6 +33,14 @@
+ 	clock-frequency = <25000000>;
+ };
+ 
++&ethernet0 {
++	interrupt-names = "macirq";
++	interrupts = <31 IRQ_TYPE_LEVEL_HIGH>;
++	interrupt-parent = <&plic>;
++	phy-mode = "rmii";
++	status = "okay";
++};
++
+ &sdhci0 {
+ 	status = "okay";
+ 	bus-width = <4>;
+diff -urpN linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/dwmac-cvitek.c linux-v6.11/drivers/net/ethernet/stmicro/stmmac/dwmac-cvitek.c
+--- linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/dwmac-cvitek.c	1970-01-01 08:00:00.000000000 +0800
++++ linux-v6.11/drivers/net/ethernet/stmicro/stmmac/dwmac-cvitek.c	2024-10-07 16:39:51.603047400 +0800
+@@ -0,0 +1,161 @@
++// SPDX-License-Identifier: GPL-2.0
++/* dwmac-cvitek.c - Bitmain DWMAC specific glue layer
++ *
++ * Copyright (c) 2019 Cvitek Ltd.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/stmmac.h>
++#include <linux/module.h>
++#include <linux/phy.h>
++#include <linux/platform_device.h>
++#include <linux/of_net.h>
++#include <linux/of_gpio.h>
++#include <linux/io.h>
++
++#include "stmmac_platform.h"
++
++struct cvitek_mac {
++	struct device *dev;
++	struct reset_control *rst;
++	struct clk *clk_tx;
++	struct clk *gate_clk_500m;
++	struct clk *gate_clk_axi4;
++	struct gpio_desc *reset;
++};
++
++static u64 bm_dma_mask = DMA_BIT_MASK(40);
++
++static int bm_eth_reset_phy(struct platform_device *pdev)
++{
++	struct device_node *np = pdev->dev.of_node;
++	int phy_reset_gpio;
++	u32	ephy_addr = 0x0;
++	void __iomem *ephy_reg;
++
++	if (!np)
++		return 0;
++
++	of_property_read_u32(np, "ephy_ctl_reg", &ephy_addr);
++
++	if (ephy_addr) {
++		ephy_reg = ioremap(ephy_addr, 0x10);
++		writel(readl(ephy_reg) & 0xFFFFFFFC, ephy_reg);
++		mdelay(2);
++		iounmap(ephy_reg);
++	}
++
++	phy_reset_gpio = of_get_named_gpio(np, "phy-reset-gpios", 0);
++
++	if (phy_reset_gpio < 0)
++		return 0;
++
++	if (gpio_request(phy_reset_gpio, "eth-phy-reset"))
++		return 0;
++
++	/* RESET_PU */
++	gpio_direction_output(phy_reset_gpio, 0);
++	mdelay(20);
++
++	gpio_direction_output(phy_reset_gpio, 1);
++	/* RC charging time */
++	mdelay(60);
++
++	return 0;
++}
++
++void bm_dwmac_exit(struct platform_device *pdev, void *priv)
++{
++	struct cvitek_mac *bsp_priv = priv;
++
++	clk_disable_unprepare(bsp_priv->gate_clk_500m);
++	clk_disable_unprepare(bsp_priv->gate_clk_axi4);
++}
++
++static int bm_dwmac_probe(struct platform_device *pdev)
++{
++	struct plat_stmmacenet_data *plat_dat;
++	struct stmmac_resources stmmac_res;
++	struct cvitek_mac *bsp_priv = NULL;
++	int ret;
++
++	pdev->dev.dma_mask = &bm_dma_mask;
++	pdev->dev.coherent_dma_mask = bm_dma_mask;
++
++	bm_eth_reset_phy(pdev);
++
++	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
++	if (ret)
++		return ret;
++
++	plat_dat = devm_stmmac_probe_config_dt(pdev, stmmac_res.mac);
++	if (IS_ERR(plat_dat))
++		return PTR_ERR(plat_dat);
++	
++	dev_info(&pdev->dev, "bm_dwmac_probe: to call stmmac_dvr_probe, plat->has_gmac %d; stmmac_res.addr %px\n",
++											plat_dat->has_gmac, stmmac_res.addr);
++	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
++	if (ret)
++		goto err_remove_config_dt;
++
++	bsp_priv = devm_kzalloc(&pdev->dev, sizeof(*bsp_priv), GFP_KERNEL);
++	if (!bsp_priv)
++		return PTR_ERR(bsp_priv);
++
++	bsp_priv->dev = &pdev->dev;
++
++	/* clock setup */
++	bsp_priv->gate_clk_500m = devm_clk_get(&pdev->dev, "clk_500m_eth");
++	dev_info(&pdev->dev, "bm_dwmac_probe: clk_500m_eth %llx\n", (unsigned long long)bsp_priv->gate_clk_500m);
++	if (IS_ERR(bsp_priv->gate_clk_500m))
++		dev_warn(&pdev->dev, "Cannot get clk_500m_eth!\n");
++	else
++		clk_prepare_enable(bsp_priv->gate_clk_500m);
++
++	bsp_priv->gate_clk_axi4 = devm_clk_get(&pdev->dev, "clk_axi4_eth");
++
++	if (IS_ERR(bsp_priv->gate_clk_axi4))
++		dev_warn(&pdev->dev, "Cannot get gate_clk_axi4!\n");
++	else
++		clk_prepare_enable(bsp_priv->gate_clk_axi4);
++
++	plat_dat->bsp_priv = bsp_priv;
++	plat_dat->exit = bm_dwmac_exit;
++
++	return 0;
++
++err_remove_config_dt:
++	//stmmac_remove_config_dt(pdev, plat_dat);
++
++	return ret;
++}
++
++static const struct of_device_id bm_dwmac_match[] = {
++	{ .compatible = "cvitek,ethernet" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, bm_dwmac_match);
++
++static struct platform_driver bm_dwmac_driver = {
++	.probe  = bm_dwmac_probe,
++	.remove = stmmac_pltfr_remove,
++	.driver = {
++		.name           = "bm-dwmac",
++		.pm		= &stmmac_pltfr_pm_ops,
++		.of_match_table = bm_dwmac_match,
++	},
++};
++module_platform_driver(bm_dwmac_driver);
++
++MODULE_AUTHOR("Wei Huang<wei.huang01@bitmain.com>");
++MODULE_DESCRIPTION("Cvitek DWMAC specific glue layer");
++MODULE_LICENSE("GPL");
+diff -urpN linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/Kconfig linux-v6.11/drivers/net/ethernet/stmicro/stmmac/Kconfig
+--- linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/Kconfig	2024-09-15 22:57:56.000000000 +0800
++++ linux-v6.11/drivers/net/ethernet/stmicro/stmmac/Kconfig	2024-10-02 01:55:40.288988801 +0800
+@@ -57,6 +57,16 @@ config DWMAC_GENERIC
+ 	  platform specific code to function or is using platform
+ 	  data for setup.
+ 
++config DWMAC_CVITEK
++	tristate "CVITEK DWMAC support"
++	default ARCH_SOPHGO
++	depends on OF && (ARCH_SOPHGO || COMPILE_TEST)
++	help
++		Support for CVITEK DWMAC Ethernet.
++		This selects CVITEK SoC glue layer support for the stmmac
++		device driver. This driver is used for the CVITEK series
++		SOCs GMAC ethernet controller.
++
+ config DWMAC_ANARION
+ 	tristate "Adaptrum Anarion GMAC support"
+ 	default ARC
+diff -urpN linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/Makefile linux-v6.11/drivers/net/ethernet/stmicro/stmmac/Makefile
+--- linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/Makefile	2024-09-15 22:57:56.000000000 +0800
++++ linux-v6.11/drivers/net/ethernet/stmicro/stmmac/Makefile	2024-10-02 01:55:40.289988801 +0800
+@@ -13,6 +13,7 @@ stmmac-$(CONFIG_STMMAC_SELFTESTS) += stm
+ 
+ # Ordering matters. Generic driver must be last.
+ obj-$(CONFIG_STMMAC_PLATFORM)	+= stmmac-platform.o
++obj-$(CONFIG_DWMAC_CVITEK)	+= dwmac-cvitek.o
+ obj-$(CONFIG_DWMAC_ANARION)	+= dwmac-anarion.o
+ obj-$(CONFIG_DWMAC_INGENIC)	+= dwmac-ingenic.o
+ obj-$(CONFIG_DWMAC_IPQ806X)	+= dwmac-ipq806x.o
+diff -urpN linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/stmmac_platform.c linux-v6.11/drivers/net/ethernet/stmicro/stmmac/stmmac_platform.c
+--- linux-v6.11-origin/drivers/net/ethernet/stmicro/stmmac/stmmac_platform.c	2024-09-15 22:57:56.000000000 +0800
++++ linux-v6.11/drivers/net/ethernet/stmicro/stmmac/stmmac_platform.c	2024-10-02 01:55:40.290988800 +0800
+@@ -543,6 +543,27 @@ stmmac_probe_config_dt(struct platform_d
+ 		plat->pmt = 1;
+ 	}
+ 
++	if (of_device_is_compatible(np, "cvitek,ethernet")) {
++		of_property_read_u32(np, "snps,multicast-filter-bins",
++				     &plat->multicast_filter_bins);
++		of_property_read_u32(np, "snps,perfect-filter-entries",
++				     &plat->unicast_filter_entries);
++		plat->unicast_filter_entries = dwmac1000_validate_ucast_entries(&pdev->dev, plat->unicast_filter_entries);
++		plat->multicast_filter_bins = dwmac1000_validate_mcast_bins(&pdev->dev, plat->multicast_filter_bins);
++#if defined(CONFIG_ARCH_CV183X)
++		plat->has_gmac4 = 1;
++		plat->has_gmac = 0;
++		plat->flags |= STMMAC_FLAG_TSO_EN;
++#else
++		plat->has_gmac4 = 0;
++		plat->has_gmac = 1;
++		plat->flags &= ~STMMAC_FLAG_TSO_EN;
++#endif
++		plat->pmt = 0;
++		dev_info(&pdev->dev, "stmmac_probe_config_dt: plat->has_gmac %d; plat->has_gmac4 %d\n",
++											plat->has_gmac, plat->has_gmac4);
++	}
++
+ 	if (of_device_is_compatible(np, "snps,dwmac-3.40a")) {
+ 		plat->has_gmac = 1;
+ 		plat->enh_desc = 1;
